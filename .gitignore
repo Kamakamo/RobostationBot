@@ -1,0 +1,10 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Секреты и данные
+.env
+credentials.json
+bot_data.pickle
+*.db

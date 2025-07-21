@@ -1,0 +1,9 @@
+SELECTING_EXHIBIT, SELECTING_PROBLEM, TYPING_PROBLEM, SUBMITTING = range(4)
+CB_NEW_REQUEST = "new_request"
+CB_EXHIBIT_PREFIX = "exh_"
+CB_PROBLEM_PREFIX = "prb_"
+CB_CLAIM_PREFIX = "claim_"
+CB_COMPLETE_PREFIX = "complete_"
+CB_CUSTOM_PROBLEM = "custom_problem"
+CB_BACK_TO_EXHIBIT = "back_to_exhibit"
+CB_CANCEL = "cancel"
