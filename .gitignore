@@ -1,7 +1,19 @@
 # Python
-.venv/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# Docker
+docker-compose.override.yml
+
+# IDE-специфичные файлы
+.idea/
+.vscode/
 
 # Секреты и данные
 .env
