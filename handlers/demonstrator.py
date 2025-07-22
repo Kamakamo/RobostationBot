@@ -1,5 +1,4 @@
 import logging
-import uuid
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Chat
 from telegram.ext import (
     ConversationHandler, MessageHandler, filters, CallbackQueryHandler, ContextTypes, CommandHandler
@@ -7,7 +6,7 @@ from telegram.ext import (
 import sheets
 import constants as c
 from config import ENGINEERS_CHAT_ID
-from .helpers import get_user_mention, escape_markdown
+from . import helpers
 
 logger = logging.getLogger(__name__)
 
@@ -78,19 +77,12 @@ async def submit_request(source, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(source, Update): user = source.message.from_user
     else: user = source.from_user
     
-    demonstrator_name_raw = get_user_mention(user)
+    demonstrator_username_raw = helpers.get_user_mention(user)
     demonstrator_id = user.id
-    
     exhibit_raw = context.user_data['exhibit']
     problem_raw = context.user_data['problem']
     
-    request_id = sheets.add_new_request(
-        demonstrator_name_raw, 
-        demonstrator_id, 
-        exhibit_raw, 
-        problem_raw
-    )
-    
+    request_id = sheets.add_new_request(demonstrator_username_raw, exhibit_raw, problem_raw)
     if request_id is None:
         error_text = "Произошла ошибка при сохранении заявки. Пожалуйста, попробуйте снова."
         if isinstance(source, Update): await source.message.reply_text(error_text)
@@ -99,26 +91,23 @@ async def submit_request(source, context: ContextTypes.DEFAULT_TYPE):
 
     context.bot_data[f"req_{request_id}_author"] = demonstrator_id
     
-    demonstrator_name_escaped = escape_markdown(demonstrator_name_raw)
-    exhibit_escaped = escape_markdown(exhibit_raw)
-    problem_escaped = escape_markdown(problem_raw)
-    request_id_escaped = escape_markdown(str(request_id))
-    
-    text_for_engineers = (f"‼️ *Новая заявка \\#{request_id_escaped}* ‼️\n\n"
-                        f"👤 *Демонстратор:* {demonstrator_name_escaped}\n"
-                        f"🏛 *Экспонат:* {exhibit_escaped}\n"
-                        f"🔧 *Проблема:* {problem_escaped}")
+    text_for_engineers = (f"‼️ *Новая заявка \\#{helpers.escape_markdown(str(request_id))}* ‼️\n\n"
+                        f"👤 *Демонстратор:* {helpers.escape_markdown(demonstrator_username_raw)}\n"
+                        f"🏛 *Экспонат:* {helpers.escape_markdown(exhibit_raw)}\n"
+                        f"🔧 *Проблема:* {helpers.escape_markdown(problem_raw)}")
                         
     keyboard = [[InlineKeyboardButton("✅ Взять в работу", callback_data=f"{c.CB_CLAIM_PREFIX}{request_id}")]]
     
-    await context.bot.send_message(
+    sent_message = await context.bot.send_message(
         chat_id=ENGINEERS_CHAT_ID,
         text=text_for_engineers,
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='MarkdownV2'
     )
     
-    final_text = f"✅ Ваша заявка #{request_id} принята. Вы получите уведомление, когда инженер возьмет ее в работу."
+    helpers.track_request_message(context, str(request_id), sent_message.chat_id, sent_message.message_id)
+    
+    final_text = f"✅ Ваша заявка #{request_id} принята."
     if isinstance(source, Update):
         await source.message.reply_text(final_text)
     else:
@@ -131,7 +120,6 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         await source.edit_message_text("Действие отменено.")
     elif update.message:
         await update.message.reply_text("Действие отменено.")
-        
     context.user_data.clear()
     return ConversationHandler.END
 

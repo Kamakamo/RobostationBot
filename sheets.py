@@ -25,13 +25,20 @@ def get_sheet(sheet_name_key):
         logger.error(f"Лист '{SHEET_NAMES[sheet_name_key]}' не найден!")
         return None
 
+def get_engineer_name_by_id(engineer_id: int):
+    sheet = get_sheet('engineers')
+    if not sheet: return None
+    try:
+        cell = sheet.find(str(engineer_id))
+        return sheet.cell(cell.row, 1).value
+    except (gspread.exceptions.CellNotFound, AttributeError):
+        return None
+
 def get_next_request_id():
-    """Получает следующий порядковый номер для ID заявки."""
     sheet = get_sheet('requests')
     if not sheet:
         logger.error("Не удалось получить лист 'Заявки' для генерации ID.")
         return None
-    # get_all_records() возвращает список словарей, его длина - это количество заявок
     try:
         num_requests = len(sheet.get_all_records())
         return num_requests + 1
@@ -39,31 +46,48 @@ def get_next_request_id():
         logger.error(f"Ошибка при подсчете записей в таблице: {e}")
         return None
 
-def add_new_request(demonstrator_name, demonstrator_id, exhibit, problem):
-    """Добавляет новую заявку в таблицу с последовательным ID и возвращает этот ID."""
+def add_new_request(demonstrator_username, exhibit, problem):
     sheet = get_sheet('requests')
     if not sheet: return None
-
-    # Получаем новый ID
     request_id = get_next_request_id()
     if request_id is None:
-        # Если не удалось сгенерировать ID, используем старый метод как запасной
         request_id = str(uuid.uuid4())[:8]
-        logger.warning(f"Не удалось сгенерировать порядковый ID, используется fallback: {request_id}")
-
     start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    row = [
-        str(request_id), start_time, "", "Новая", exhibit, problem,
-        demonstrator_name, str(demonstrator_id), ""
-    ]
+    row = [str(request_id), start_time, "", "Новая", exhibit, problem, demonstrator_username, "", "", ""]
     sheet.append_row(row)
-    
-    # Возвращаем сгенерированный ID, чтобы бот мог его использовать
     return request_id
 
-#
-# Остальные функции в файле sheets.py остаются без изменений
-#
+def update_request_status(request_id, new_status, engineer_username="", engineer_name="", comment=""):
+    sheet = get_sheet('requests')
+    if not sheet: return False
+    try:
+        cell = sheet.find(str(request_id))
+        row_number = cell.row
+        sheet.update_cell(row_number, 4, new_status)
+        if new_status == "В работе":
+            sheet.update_cell(row_number, 8, engineer_username)
+            sheet.update_cell(row_number, 9, engineer_name)
+        elif new_status == "Завершена":
+            end_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            sheet.update_cell(row_number, 3, end_time)
+            sheet.update_cell(row_number, 10, comment)
+        return True
+    except gspread.exceptions.CellNotFound:
+        return False
+
+def is_request_new(request_id: str) -> bool:
+    sheet = get_sheet('requests')
+    if not sheet: return False
+    try:
+        cell = sheet.find(str(request_id))
+        if not cell:
+            return False
+        status = sheet.cell(cell.row, 4).value
+        return status.strip().lower() == "новая"
+    except (gspread.exceptions.CellNotFound, AttributeError) as e:
+        logger.error(f"Ошибка при проверке статуса заявки {request_id}: {e}")
+        return False
+
 def get_engineers():
     sheet = get_sheet('engineers')
     if not sheet: return []
@@ -82,33 +106,16 @@ def get_content():
         content[exhibit_name] = problems
     return content
 
-def update_request_status(request_id, new_status, engineer_name=""):
-    sheet = get_sheet('requests')
-    if not sheet: return False
-    try:
-        cell = sheet.find(str(request_id))
-        row_number = cell.row
-        sheet.update_cell(row_number, 4, new_status) # status
-        if new_status == "В работе":
-            sheet.update_cell(row_number, 9, engineer_name) # engineer_name
-        elif new_status == "Завершена":
-            end_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            sheet.update_cell(row_number, 3, end_time) # end_time
-        return True
-    except gspread.exceptions.CellNotFound:
-        logger.warning(f"Заявка {request_id} не найдена в таблице для обновления.")
-        return False
-
 def get_requests_by_status(status):
     sheet = get_sheet('requests')
     if not sheet: return []
     df = pd.DataFrame(sheet.get_all_records())
-    if df.empty or 'status' not in df.columns: return []
-    return df[df['status'] == status].to_dict('records')
+    if df.empty or 'Статус' not in df.columns: return []
+    return df[df['Статус'] == status].to_dict('records')
 
-def get_requests_by_demonstrator(demonstrator_id):
+def get_requests_by_demonstrator(demonstrator_username: str):
     sheet = get_sheet('requests')
     if not sheet: return []
     df = pd.DataFrame(sheet.get_all_records())
-    if df.empty or 'demonstrator_id' not in df.columns: return []
-    return df[df['demonstrator_id'] == str(demonstrator_id)].to_dict('records')
+    if df.empty or 'demonstrator_username' not in df.columns: return []
+    return df[df['demonstrator_username'] == demonstrator_username].to_dict('records')
