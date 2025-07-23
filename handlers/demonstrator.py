@@ -5,7 +5,7 @@ from telegram.ext import (
 )
 import sheets
 import constants as c
-from config import ENGINEERS_CHAT_ID
+from config import ENGINEERS_CHAT_ID, MENTION_ON_NEW_REQUEST
 from . import helpers
 
 logger = logging.getLogger(__name__)
@@ -94,7 +94,8 @@ async def submit_request(source, context: ContextTypes.DEFAULT_TYPE):
     text_for_engineers = (f"‼️ *Новая заявка \\#{helpers.escape_markdown(str(request_id))}* ‼️\n\n"
                         f"👤 *Демонстратор:* {helpers.escape_markdown(demonstrator_username_raw)}\n"
                         f"🏛 *Экспонат:* {helpers.escape_markdown(exhibit_raw)}\n"
-                        f"🔧 *Проблема:* {helpers.escape_markdown(problem_raw)}")
+                        f"🔧 *Проблема:* {helpers.escape_markdown(problem_raw)}\n\n"
+                        f"{MENTION_ON_NEW_REQUEST}")
                         
     keyboard = [[InlineKeyboardButton("✅ Взять в работу", callback_data=f"{c.CB_CLAIM_PREFIX}{request_id}")]]
     

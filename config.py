@@ -7,6 +7,7 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ENGINEERS_CHAT_ID = os.getenv("ENGINEERS_CHAT_ID")
 GSHEETS_TABLE_NAME = os.getenv("GSHEETS_TABLE_NAME")
+MENTION_ON_NEW_REQUEST = os.getenv("MENTION_ON_NEW_REQUEST")
 
 # --- Статические настройки ---
 GSHEETS_CREDENTIALS_FILE = 'credentials.json'
