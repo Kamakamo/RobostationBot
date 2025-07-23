@@ -2,7 +2,6 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes, CommandHandler
 import sheets
-from config import ADMIN_IDS
 from .helpers import escape_markdown, get_user_mention
 
 logger = logging.getLogger(__name__)
@@ -12,19 +11,6 @@ async def update_data_from_sheets(context: ContextTypes.DEFAULT_TYPE):
     context.bot_data['engineers'] = sheets.get_engineers()
     context.bot_data['content'] = sheets.get_content()
     logger.info(f"Данные обновлены. Инженеров: {len(context.bot_data.get('engineers',[]))}, Экспонатов: {len(context.bot_data.get('content',{}))}")
-
-async def show_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    if user_id not in ADMIN_IDS:
-        return
-    engineers_count = len(context.bot_data.get('engineers', []))
-    content_count = len(context.bot_data.get('content', {}))
-    text = (f"*Статус бота:*\n\n"
-            f"✅ *Бот онлайн*\n"
-            f"🔗 *Подключение к Google Sheets:* {'Успешно' if sheets.workbook else 'Ошибка'}\n"
-            f"👷‍♂️ *Инженеров в кэше:* {engineers_count}\n"
-            f"🏛️ *Экспонатов в кэше:* {content_count}")
-    await update.message.reply_text(text, parse_mode='MarkdownV2')
 
 async def show_my_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
@@ -43,5 +29,4 @@ async def show_my_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(text, parse_mode='MarkdownV2')
 
-status_handler = CommandHandler("status", show_status)
 my_requests_handler = CommandHandler("myrequests", show_my_requests)

@@ -6,7 +6,6 @@ load_dotenv()
 # --- Читаем конфигурацию из переменных окружения ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ENGINEERS_CHAT_ID = os.getenv("ENGINEERS_CHAT_ID")
-ADMIN_IDS = [admin_id.strip() for admin_id in os.getenv("ADMIN_IDS", "").split(',') if admin_id]
 GSHEETS_TABLE_NAME = os.getenv("GSHEETS_TABLE_NAME")
 
 # --- Статические настройки ---
