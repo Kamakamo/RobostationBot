@@ -29,25 +29,100 @@ async def start_completion(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     request_id = str(query.data.split(c.CB_COMPLETE_PREFIX)[1])
     context.user_data["completing_request_id"] = request_id
 
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "🔄 Перезагрузка",
+                callback_data=f"{c.CB_COMPLETE_REBOOT}{request_id}"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "📝 Другое",
+                callback_data=f"{c.CB_COMPLETE_OTHER}{request_id}"
+            )
+        ]
+    ]
+
     await query.edit_message_text(
         text=f"Завершение заявки \\#{helpers.escape_markdown(request_id)}\\.\n\n"
-        "Пожалуйста, отправьте сообщение с кратким описанием решения проблемы "
-        "\\(например, «Перезагрузил ПО»\\)\\.\n\n"
-        "Чтобы отменить, введите /cancel\\.",
+        "Выберите тип решения проблемы:",
+        reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="MarkdownV2",
     )
     return c.AWAITING_COMMENT
 
 
+async def complete_with_reboot(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+
+    request_id = str(query.data.split(c.CB_COMPLETE_REBOOT)[1])
+    comment = "Перезагрузка"
+
+    if sheets.update_request_status(request_id, "Завершена", comment=comment):
+        await query.edit_message_text(
+            f"✅ Заявка #{request_id} успешно завершена с решением: Перезагрузка."
+        )
+
+        all_requests = sheets.get_requests_by_status("Завершена")
+        req_data = next((r for r in all_requests if r["id"] == request_id), None)
+
+        if req_data:
+            final_text = (
+                f"✅ *Заявка \\#{helpers.escape_markdown(request_id)} завершена*\n"
+                f"👷‍♂️ *Инженер:* {helpers.escape_markdown(req_data.get('engineer_username', ''))}\n"
+                f"📝 *Решение:* {helpers.escape_markdown(comment)}"
+            )
+            await context.bot.send_message(
+                chat_id=ENGINEERS_CHAT_ID, text=final_text, parse_mode="MarkdownV2"
+            )
+
+        demonstrator_id = context.bot_data.get(f"req_{request_id}_author")
+        if demonstrator_id:
+            await context.bot.send_message(
+                chat_id=demonstrator_id,
+                text=f"✅ Ваша заявка \\#{helpers.escape_markdown(request_id)} была успешно завершена\\!",
+                parse_mode="MarkdownV2",
+            )
+
+        if f"req_{request_id}_author" in context.bot_data:
+            del context.bot_data[f"req_{request_id}_author"]
+    else:
+        await query.edit_message_text("Не удалось обновить статус заявки в таблице.")
+
+    context.user_data.clear()
+    return ConversationHandler.END
+
+
+async def start_other_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+
+    request_id = str(query.data.split(c.CB_COMPLETE_OTHER)[1])
+    context.user_data["completing_request_id"] = request_id
+
+    await query.edit_message_text(
+        text=f"Завершение заявки \\#{helpers.escape_markdown(request_id)}\\.\n\n"
+        "Пожалуйста, напишите комментарий с описанием решения проблемы\\.\n\n"
+        "Чтобы отменить, введите /cancel\\.",
+        parse_mode="MarkdownV2",
+    )
+    return c.AWAITING_OTHER_COMMENT
+
+
 async def save_comment_and_complete(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int:
-    comment = update.message.text
+    user_comment = update.message.text
     request_id = context.user_data.get("completing_request_id")
 
     if not request_id:
         await update.message.reply_text("Произошла ошибка, не могу найти ID заявки.")
         return ConversationHandler.END
+
+    # Добавляем префикс "Другое:" к комментарию
+    comment = f"Другое: {user_comment}"
 
     if sheets.update_request_status(request_id, "Завершена", comment=comment):
         await update.message.reply_text(
@@ -61,7 +136,7 @@ async def save_comment_and_complete(
             final_text = (
                 f"✅ *Заявка \\#{helpers.escape_markdown(request_id)} завершена*\n"
                 f"👷‍♂️ *Инженер:* {helpers.escape_markdown(req_data.get('engineer_username', ''))}\n"
-                f"📝 *Комментарий:* {helpers.escape_markdown(comment)}"
+                f"📝 *Решение:* {helpers.escape_markdown(comment)}"
             )
             await context.bot.send_message(
                 chat_id=ENGINEERS_CHAT_ID, text=final_text, parse_mode="MarkdownV2"
@@ -272,6 +347,10 @@ completion_conv_handler = ConversationHandler(
     ],
     states={
         c.AWAITING_COMMENT: [
+            CallbackQueryHandler(complete_with_reboot, pattern=f"^{c.CB_COMPLETE_REBOOT}"),
+            CallbackQueryHandler(start_other_comment, pattern=f"^{c.CB_COMPLETE_OTHER}"),
+        ],
+        c.AWAITING_OTHER_COMMENT: [
             MessageHandler(filters.TEXT & ~filters.COMMAND, save_comment_and_complete)
         ]
     },
