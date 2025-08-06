@@ -12,6 +12,7 @@ from telegram.ext import (
 )
 
 import constants as c
+import reminders
 import sheets
 from config import ENGINEERS_CHAT_ID
 
@@ -88,6 +89,9 @@ async def complete_with_reboot(update: Update, context: ContextTypes.DEFAULT_TYP
 
         if f"req_{request_id}_author" in context.bot_data:
             del context.bot_data[f"req_{request_id}_author"]
+        
+        # Очищаем данные отслеживания напоминаний
+        reminders.cleanup_request_tracking(context, request_id)
     else:
         await query.edit_message_text("Не удалось обновить статус заявки в таблице.")
 
@@ -152,6 +156,9 @@ async def save_comment_and_complete(
 
         if f"req_{request_id}_author" in context.bot_data:
             del context.bot_data[f"req_{request_id}_author"]
+        
+        # Очищаем данные отслеживания напоминаний
+        reminders.cleanup_request_tracking(context, request_id)
     else:
         await update.message.reply_text("Не удалось обновить статус заявки в таблице.")
 
@@ -201,6 +208,9 @@ async def claim_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Произошла ошибка при обновлении статуса в таблице.", show_alert=True
         )
         return
+
+    # Начинаем отслеживание времени для напоминаний
+    reminders.track_request_claim_time(context, request_id, user.id)
 
     await query.answer(
         "Вы взяли заявку в работу! Карточка задачи отправлена вам в личные сообщения."

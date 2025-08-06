@@ -11,6 +11,7 @@ from handlers.engineer import (
     in_progress_requests_handler,
     new_requests_handler,
 )
+from reminders import check_and_send_reminders
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -26,6 +27,8 @@ def main() -> None:
 
     job_queue = application.job_queue
     job_queue.run_repeating(update_data_from_sheets, interval=300, first=1)
+    # Проверяем напоминания каждые 10 минут
+    job_queue.run_repeating(check_and_send_reminders, interval=600, first=60)
 
     # Регистрация хендлеров. ПОРЯДОК ВАЖЕН!
 
