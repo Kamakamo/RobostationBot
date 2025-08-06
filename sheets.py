@@ -120,6 +120,22 @@ def is_request_new(request_id: str) -> bool:
         return False
 
 
+def is_request_in_progress(request_id: str) -> bool:
+    """Проверяет, находится ли заявка в статусе 'В работе'"""
+    sheet = get_sheet("requests")
+    if not sheet:
+        return False
+    try:
+        cell = sheet.find(str(request_id))
+        if not cell:
+            return False
+        status = sheet.cell(cell.row, 4).value
+        return status.strip().lower() == "в работе"
+    except (gspread.exceptions.CellNotFound, AttributeError) as e:
+        logger.error(f"Ошибка при проверке статуса заявки {request_id}: {e}")
+        return False
+
+
 def get_engineers():
     sheet = get_sheet("engineers")
     if not sheet:

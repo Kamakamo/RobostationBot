@@ -19,6 +19,44 @@ from . import helpers
 
 logger = logging.getLogger(__name__)
 
+# --- ФУНКЦИЯ НАПОМИНАНИЯ О НЕЗАКРЫТЫХ ЗАЯВКАХ ---
+
+
+async def send_reminder(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Отправляет напоминание инженеру о незакрытой заявке"""
+    job = context.job
+    engineer_id = job.data["engineer_id"]
+    request_id = job.data["request_id"]
+    
+    # Проверяем, что заявка все еще в работе
+    if not sheets.is_request_in_progress(request_id):
+        logger.info(f"Заявка {request_id} уже не в статусе 'В работе', напоминание отменено")
+        return
+    
+    try:
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    text=f"🏁 Завершить #{request_id}",
+                    callback_data=f"{c.CB_COMPLETE_PREFIX}{request_id}",
+                )
+            ]
+        ]
+        
+        await context.bot.send_message(
+            chat_id=engineer_id,
+            text=f"⏰ *Напоминание*\n\n"
+            f"У вас есть незавершенная заявка \\#{helpers.escape_markdown(request_id)}\\.\n"
+            f"Она находится в работе уже более 1 часа\\.\n\n"
+            f"Пожалуйста, завершите заявку или обновите её статус\\.",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="MarkdownV2",
+        )
+        logger.info(f"Отправлено напоминание инженеру {engineer_id} о заявке {request_id}")
+    except Exception as e:
+        logger.error(f"Не удалось отправить напоминание инженеру {engineer_id}: {e}")
+
+
 # --- ДИАЛОГ ЗАВЕРШЕНИЯ ЗАЯВКИ ---
 
 
@@ -59,6 +97,13 @@ async def complete_with_reboot(update: Update, context: ContextTypes.DEFAULT_TYP
 
     request_id = str(query.data.split(c.CB_COMPLETE_REBOOT)[1])
     comment = "Перезагрузка"
+    
+    # Отменяем напоминание для этой заявки
+    job_name = f"reminder_{request_id}_{query.from_user.id}"
+    current_jobs = context.job_queue.get_jobs_by_name(job_name)
+    for job in current_jobs:
+        job.schedule_removal()
+        logger.info(f"Отменено напоминание для заявки {request_id}")
 
     if sheets.update_request_status(request_id, "Завершена", comment=comment):
         await query.edit_message_text(
@@ -121,6 +166,13 @@ async def save_comment_and_complete(
         await update.message.reply_text("Произошла ошибка, не могу найти ID заявки.")
         return ConversationHandler.END
 
+    # Отменяем напоминание для этой заявки
+    job_name = f"reminder_{request_id}_{update.message.from_user.id}"
+    current_jobs = context.job_queue.get_jobs_by_name(job_name)
+    for job in current_jobs:
+        job.schedule_removal()
+        logger.info(f"Отменено напоминание для заявки {request_id}")
+
     # Добавляем префикс "Другое:" к комментарию
     comment = f"Другое: {user_comment}"
 
@@ -161,6 +213,9 @@ async def save_comment_and_complete(
 
 async def cancel_completion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     request_id = context.user_data.get("completing_request_id")
+    
+    # Примечание: напоминание не отменяем, так как заявка остается в работе
+    
     await update.message.reply_text(
         f"Завершение заявки #{request_id} отменено. Она остается в статусе 'В работе'."
     )
@@ -243,6 +298,27 @@ async def claim_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="MarkdownV2",
         )
+        
+        # Планируем напоминание через 1 час (3600 секунд)
+        job_data = {
+            "engineer_id": user.id,
+            "request_id": request_id
+        }
+        job_name = f"reminder_{request_id}_{user.id}"
+        
+        # Удаляем предыдущее напоминание, если оно было
+        current_jobs = context.job_queue.get_jobs_by_name(job_name)
+        for job in current_jobs:
+            job.schedule_removal()
+            
+        context.job_queue.run_once(
+            send_reminder,
+            when=3600,  # 1 час = 3600 секунд
+            data=job_data,
+            name=job_name
+        )
+        logger.info(f"Запланировано напоминание для инженера {user.id} о заявке {request_id} через 1 час")
+        
     except Exception as e:
         logger.error(f"Не удалось отправить ЛС инженеру {user.id}: {e}")
         await query.message.reply_text(
